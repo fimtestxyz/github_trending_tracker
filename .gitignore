@@ -1,0 +1,12 @@
+# Dependencies
+node_modules
+target
+.next
+
+# Logs
+*.log
+.service_pids
+
+# Environment
+.env*
+.DS_Store

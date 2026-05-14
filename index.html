@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitTrend Analyzer | Daily Scraping & Insights</title>
+    <style>
+        :root {
+            /* Color Palette - Dark Theme inspired by DevTools/GitHub Dark */
+            --bg-body: #0d1117;
+            --bg-sidebar: #161b22;
+            --bg-card: #21262d;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-primary: #58a6ff;
+            --accent-success: #238636;
+            --accent-warning: #d29922;
+            --accent-danger: #f85149;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            --radius-md: 6px;
+            --radius-lg: 12px;
+            --shadow-card: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-stack);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            height: 60px;
+            background-color: var(--bg-sidebar);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--text-main);
+        }
+
+        .brand svg { fill: var(--text-main); }
+
+        .actions button {
+            background-color: var(--accent-success);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .actions button:hover { background-color: #2ea043; }
+        .actions button:active { transform: scale(0.98); }
+        .actions button:disabled { background-color: var(--border-color); cursor: not-allowed; opacity: 0.7; }
+
+        /* --- Layout --- */
+        .app-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* --- Sidebar --- */
+        aside {
+            width: 280px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        aside h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-group { margin-bottom: 24px; }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: background 0.2s;
+            color: var(--text-main);
+        }
+
+        .radio-label:hover { background-color: var(--bg-card); }
+        .radio-label input { margin-right: 10px; accent-color: var(--accent-primary); }
+
+        /* --- Main Content --- */
+        main {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* --- Analysis Section --- */
+        .analysis-panel {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        
+        .analysis-panel.visible { opacity: 1; transform: translateY(0); }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
+        }
+
+        .summary-box h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--accent-primary); }
+        .summary-box p { font-size: 0.95rem; line-height: 1.6; color: var(--text-muted); }
+        .summary-box strong { color: var(--text-main); }
+
+        /* --- Results Grid --- */
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .repo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        /* --- Repo Card --- */
+        .repo-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .repo-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card);
+            border-color: var(--text-muted);
+        }
+
+        .repo-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .repo-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 12px;
+            background-color: var(--border-color);
+            object-fit: cover;
+        }
+
+        .repo-title { font-weight: 600; color: var(--accent-primary); font-size: 1.05rem; text-decoration: none; }
+        .repo-title:hover { text-decoration: underline; }
+        .repo-visibility { font-size: 0.75rem; border: 1px solid var(--border-color); padding: 2px 6px; border-radius: 10px; color: var(--text-muted); margin-left: 8px; }
+
+        .repo-desc { font-size: 0.9rem; color: var(--text-main); margin-bottom: 16px; line-height: 1.5; flex-grow: 1; }
+
+        .repo-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .meta-item { display: flex; align-items: center; gap: 5px; }
+        .lang-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+        /* --- Skeleton Loading --- */
+        .skeleton {
+            background: linear-gradient(90deg, var(--bg-card) 25%, var(--border-color) 50%, var(--bg-card) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+            color: transparent !important;
+        }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* --- Modal --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        
+        .modal {
+            background: var(--bg-sidebar);
+            border: 1px solid var(--border-color);
+            width: 600px;
+            max-width: 90%;
+            border-radius: var(--radius-lg);
+            padding: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.open .modal { transform: scale(1); }
+
+        .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-body p { margin-bottom: 10px; color: var(--text-main); }
+        .modal-stats { display: flex; gap: 20px; margin-top: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius-md); }
+
+        /* --- Toast Notification --- */
+        #toast-container {
+            position: fixed; bottom: 20px; right: 20px;
+            display: flex; flex-direction: column; gap: 10px; z-index: 2000;
+        }
+        .toast {
+            background: var(--bg-card);
+            border-left: 4px solid var(--accent-primary);
+            color: var(--text-main);
+            padding: 12px 20px;
+            border-radius: var(--radius-md);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            font-size: 0.9rem;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 250px;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* --- Canvas --- */
+        canvas { width: 100%; height: 100%; }
+
+        /* --- Responsive --- */
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; overflow-y: auto; }
+            aside { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); max-height: 200px; }
+            main { overflow-y: visible; }
+            .analysis-panel { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <svg height="32" viewBox="0 0 16 16" version="1.1" width="32" aria-hidden="true"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        <span>GitTrend Analyzer</span>
+    </div>
+    <div class="actions">
+        <button id="scrapeBtn" onclick="app.scrapeData()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/></svg>
+            Scrape Daily
+        </button>
+    </div>
+</header>
+
+<div class="app-container">
+    <aside>
+        <div class="filter-group">
+            <h3>Time Range</h3>
+            <label class="radio-label">
+                <input type="radio" name="dateRange" value="daily" checked onchange="app.handleFilterChange('date', 'daily')"> Today
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="dateRange" value="weekly" onchange="app.handleFilterChange('date', 'weekly')"> This Week
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="dateRange" value="monthly" onchange="app.handleFilterChange('date', 'monthly')"> This Month
+            </label>
+        </div>
+
+        <div class="filter-group">
+            <h3>Spoken Language</h3>
+            <label class="radio-label">
+                <input type="radio" name="spokenLang" value="all" checked onchange="app.handleFilterChange('spoken', 'all')"> All Languages
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="spokenLang" value="en" onchange="app.handleFilterChange('spoken', 'en')"> English
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="spokenLang" value="zh" onchange="app.handleFilterChange('spoken', 'zh')"> Chinese
+            </label>
+        </div>
+
+        <div class="filter-group">
+            <h3>Program Language</h3>
+            <div id="lang-filters">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </aside>
+
+    <main>
+        <!-- Analysis Section -->
+        <section id="analysisPanel" class="analysis-panel">
+            <div class="chart-wrapper">
+                <h3 style="margin-bottom:15px; font-size: 0.9rem; color:var(--text-muted); text-transform:uppercase;">Language Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="langChart"></canvas>
+                </div>
+            </div>
+            <div class="summary-box">
+                <h2><svg style="vertical-align:middle; margin-right:5px;" width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.5A.5.5 0 017 7v1a4.5 4.5 0 003.757 3.629.5.5 0 01-.156.986A5.5 5.5 0 016 8V7a.5.5 0 01.5-.5z"/></svg> AI Summary</h2>
+                <p id="summaryText">No data available. Please click "Scrape Daily" to fetch the latest trends.</p>
+            </div>
+        </section>
+
+        <div class="results-header">
+            <h2 id="resultsTitle">Trending Repositories</h2>
+            <span id="resultCount" style="color:var(--text-muted); font-size:0.9rem">0 results</span>
+        </div>
+
+        <div id="repoGrid" class="repo-grid">
+            <!-- Cards will be injected here -->
+        </div>
+    </main>
+</div>
+
+<!-- Details Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target === this) app.closeModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">Repo Name</h2>
+            <button class="modal-close" onclick="app.closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="modalDesc" style="color: var(--text-muted);">Description goes here...</p>
+            <div class="modal-stats">
+                <div class="meta-item"><strong>Stars:</strong> <span id="modalStars"></span></div>
+                <div class="meta-item"><strong>Forks:</strong> <span id="modalForks"></span></div>
+                <div class="meta-item"><strong>Language:</strong> <span id="modalLang"></span></div>
+            </div>
+            <div style="margin-top:20px;">
+                <h4 style="margin-bottom:10px;">Top Contributors</h4>
+                <div id="modalContributors" style="display:flex; gap:10px;"></div>
+            </div>
+        </div>
+        <div style="margin-top:30px; text-align:right;">
+            <button onclick="app.closeModal()" style="padding:8px 16px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main); border-radius:6px; cursor:pointer;">Close</button>
+            <button onclick="window.open('#', '_blank')" style="padding:8px 16px; border:none; background:var(--accent-primary); color:white; border-radius:6px; cursor:pointer; margin-left:10px;">View on GitHub</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toasts -->
+<div id="toast-container"></div>
+
+<script>
+/**
+ * GitTrend Analyzer Application
+ * Handles simulated scraping, data analysis, and UI interactions.
+ */
+const app = (() => {
+    // State
+    const state = {
+        repos: [],
+        filter: {
+            date: 'daily',
+            spoken: 'all',
+            lang: 'all'
+        },
+        languages: ['Python', 'JavaScript', 'TypeScript', 'Rust', 'Go', 'Java', 'C++', 'HTML/CSS', 'Ruby'],
+        colors: {
+            'Python': '#3572A5',
+            'JavaScript': '#f1e05a',
+            'TypeScript': '#2b7489',
+            'Rust': '#dea584',
+            'Go': '#00ADD8',
+            'Java': '#b07219',
+            'C++': '#f34b7d',
+            'HTML/CSS': '#e34c26',
+            'Ruby': '#701516',
+            'Unknown': '#8b949e'
+        }
+    };
+
+    // DOM Elements
+    const els = {
+        repoGrid: document.getElementById('repoGrid'),
+        analysisPanel: document.getElementById('analysisPanel'),
+        summaryText: document.getElementById('summaryText'),
+        langFilters: document.getElementById('lang-filters'),
+        resultCount: document.getElementById('resultCount'),
+        scrapeBtn: document.getElementById('scrapeBtn'),
+        modalOverlay: document.getElementById('modalOverlay'),
+        modalTitle: document.getElementById('modalTitle'),
+        modalDesc: document.getElementById('modalDesc'),
+        modalStars: document.getElementById('modalStars'),
+        modalForks: document.getElementById('modalForks'),
+        modalLang: document.getElementById('modalLang'),
+        modalContributors: document.getElementById('modalContributors'),
+        canvas: document.getElementById('langChart')
+    };
+
+    // --- Mock Data Generators ---
+
+    function generateMockRepo() {
+        const langs = state.languages;
+        const lang = langs[Math.floor(Math.random() * langs.length)];
+        const topics = ['AI', 'Web3', 'CLI', 'Framework', 'Tool', 'Library', 'Boilerplate'];
+        const topic = topics[Math.floor(Math.random() * topics.length)];
+        
+        return {
+            id: Math.random().toString(36).substr(2, 9),
+            owner: `user-${Math.floor(Math.random() * 1000)}`,
+            name: `${topic.toLowerCase().replace(' ', '-')}-${Math.floor(Math.random() * 999)}`,
+            description: `A powerful ${topic} built with ${lang}. This project focuses on high performance and ease of use for developers.`,
+            language: lang,
+            stars: Math.floor(Math.random() * 5000) + 100,
+            forks: Math.floor(Math.random() * 500) + 10,
+            avatar: `https://picsum.photos/seed/${Math.random()}/50/50`,
+            contributors: [
+                `https://picsum.photos/seed/${Math.random()}/30/30`,
+                `https://picsum.photos/seed/${Math.random()}/30/30`,
+                `https://picsum.photos/seed/${Math.random()}/30/30`
+            ]
+        };
+    }
+
+    // --- Core Logic ---
+
+    function init() {
+        renderLangFilters();
+        scrapeData(); // Initial load
+    }
+
+    function renderLangFilters() {
+        let html = `<label class="radio-label"><input type="radio" name="progLang" value="all" checked onchange="app.handleFilterChange('lang', 'all')"> All</label>`;
+        state.languages.forEach(lang => {
+            html += `<label class="radio-label">
+                        <input type="radio" name="progLang" value="${lang}" onchange="app.handleFilterChange('lang', '${lang}')"> 
+                        ${lang}
+                     </label>`;
+        });
+        els.langFilters.innerHTML = html;
+    }
+
+    function handleFilterChange(type, value) {
+        state.filter[type] = value;
+        filterAndRender();
+    }
+
+    // Simulate Async Scraping
+    async function scrapeData() {
+        setScrapingState(true);
+        showToast('Initiating scraping protocol...', 'info');
+        
+        // Simulate network delay
+        await new Promise(r => setTimeout(r, 800));
+        showToast('Parsing HTML structure...', 'info');
+
+        // Generate Data
+        state.repos = Array.from({ length: 24 }, generateMockRepo);
+
+        await new Promise(r => setTimeout(r, 600));
+        showToast('Analyzing trends and generating summary...', 'success');
+
+        setScrapingState(false);
+        filterAndRender();
+    }
+
+    function setScrapingState(isLoading) {
+        els.scrapeBtn.disabled = isLoading;
+        els.scrapeBtn.innerHTML = isLoading 
+            ? '<span class="skeleton">Loading...</span>' 
+            : '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/></svg> Scrape Daily';
+        
+        if (isLoading) {
+            els.repoGrid.innerHTML = Array.from({length: 6}, () => 
+                `<div class="repo-card" style="height: 180px;">
+                    <div class="skeleton" style="width: 50px; height: 20px; margin-bottom: 10px;"></div>
+                    <div class="skeleton" style="width: 100%; height: 60px; margin-bottom: 10px;"></div>
+                    <div class="skeleton" style="width: 80px; height: 15px;"></div>
+                 </div>`
+            ).join('');
+            els.analysisPanel.classList.remove('visible');
+        }
+    }
+
+    function filterAndRender() {
+        // Filter Logic
+        let filtered = state.repos;
+        if (state.filter.lang !== 'all') {
+            filtered = filtered.filter(r => r.language === state.filter.lang);
+        }
+
+        renderList(filtered);
+        analyzeData(filtered);
+        els.resultCount.textContent = `${filtered.length} results found`;
+    }
+
+    function renderList(repos) {
+        if (repos.length === 0) {
+            els.repoGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">No repositories found for these filters.</div>`;
+            return;
+        }
+
+        els.repoGrid.innerHTML = repos.map(repo => {
+            const color = state.colors[repo.language] || state.colors['Unknown'];
+            return `
+            <div class="repo-card" onclick="app.openModal('${repo.id}')">
+                <div class="repo-header">
+                    <img src="${repo.avatar}" class="repo-avatar" alt="Owner">
+                    <div>
+                        <a href="#" class="repo-title" onclick="event.stopPropagation()">${repo.owner}/${repo.name}</a>
+                        <span class="repo-visibility">Public</span>
+                    </div>
+                </div>
+                <div class="repo-desc">${repo.description}</div>
+                <div class="repo-meta">
+                    <div class="meta-item">
+                        <span class="lang-dot" style="background-color: ${color}"></span>
+                        ${repo.language}
+                    </div>
+                    <div class="meta-item">
+                        <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="var(--text-muted)"><path fill-rule="evenodd" d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"></path></svg>
+                        ${repo.stars.toLocaleString()}
+                    </div>
+                    <div class="meta-item">
+                        <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="var(--text-muted)"><path fill-rule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"></path></svg>
+                        ${repo.forks.toLocaleString()}
+                    </div>
+                </div>
+            </div>
+        `}).join('');
+    }
+
+    function analyzeData(data) {
+        if (data.length === 0) {
+            els.summaryText.textContent = "Not enough data to analyze.";
+            return;
+        }
+
+        // 1. Language Stats
+        const langCounts = {};
+        data.forEach(r => {
+            langCounts[r.language] = (langCounts[r.language] || 0) + 1;
+        });
+
+        // 2. Find Top Lang
+        const sortedLangs = Object.entries(langCounts).sort((a,b) => b[1] - a[1]);
+        const topLang = sortedLangs[0];
+        const totalStars = data.reduce((acc, r) => acc + r.stars, 0);
+        const topRepo = data.sort((a,b) => b.stars - a.stars)[0];
+
+        // 3. Generate Summary
+        const summary = `The trending list is dominated by <strong>${topLang[0]}</strong> projects, which make up ${Math.round((topLang[1]/data.length)*100)}% of the results. 
+        The current star-leader is <strong>${topRepo.owner}/${topRepo.name}</strong> with ${topRepo.stars.toLocaleString()} stars. 
+        Overall activity is high with a combined total of <strong>${totalStars.toLocaleString()}</strong> stars across the listed repositories.`;
+        
+        els.summaryText.innerHTML = summary;
+        els.analysisPanel.classList.add('visible');
+
+        // 4. Draw Chart
+        drawChart(sortedLangs);
+    }
+
+    // --- Canvas Charting (2D Tool Logic) ---
+    function drawChart(data) {
+        const ctx = els.canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = els.canvas.getBoundingClientRect();
+        
+        // Resize canvas for retina display
+        els.canvas.width = rect.width * dpr;
+        els.canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        const width = rect.width;
+        const height = rect.height;
+        const padding = 30;
+        const chartHeight = height - padding * 2;
+        const chartWidth = width - padding * 2;
+        const barWidth = (chartWidth / data.length) * 0.6;
+        const gap = (chartWidth / data.length) * 0.4;
+        const maxVal = Math.max(...data.map(d => d[1]));
+
+        ctx.clearRect(0, 0, width, height);
+
+        data.forEach((item, index) => {
+            const [lang, count] = item;
+            const barHeight = (count / maxVal) * chartHeight;
+            const x = padding + index * (barWidth + gap);
+            const y = height - padding - barHeight;
+
+            // Draw Bar
+            ctx.fillStyle = state.colors[lang] || state.colors['Unknown'];
+            
+            // Rounded top corners simulation
+            ctx.beginPath();
+            ctx.roundRect(x, y, barWidth, barHeight, [4, 4, 0, 0]);
+            ctx.fill();
+
+            // Draw Label
+            ctx.fillStyle = '#8b949e';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(lang, x + barWidth/2, height - 10);
+
+            // Draw Value
+            ctx.fillStyle = '#c9d1d9';
+            ctx.fillText(count, x + barWidth/2, y - 5);
+        });
+
+        // Draw Axis Line
+        ctx.strokeStyle = '#30363d';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.stroke();
+    }
+
+    // --- Interactions ---
+
+    function openModal(repoId) {
+        const repo = state.repos.find(r => r.id === repoId);
+        if (!repo) return;
+
+        els.modalTitle.textContent = `${repo.owner}/${repo.name}`;
+        els.modalDesc.textContent = repo.description;
+        els.modalStars.textContent = repo.stars.toLocaleString();
+        els.modalForks.textContent = repo.forks.toLocaleString();
+        els.modalLang.textContent = repo.language;
+        els.modalLang.style.color = state.colors[repo.language];
+        
+        els.modalContributors.innerHTML = repo.contributors.map(url => 
+            `<img src="${url}" style="width:30px; height:30px; border-radius:50%; border: 2px solid var(--bg-sidebar);">`
+        ).join('');
+
+        els.modalOverlay.classList.add('open');
+    }
+
+    function closeModal() {
+        els.modalOverlay.classList.remove('open');
+    }
+
+    function showToast(msg, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = msg;
+        if (type === 'success') toast.style.borderLeftColor = 'var(--accent-success)';
+        if (type === 'error') toast.style.borderLeftColor = 'var(--accent-danger)';
+        
+        document.getElementById('toast-container').appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Public API
+    return {
+        init,
+        scrapeData,
+        handleFilterChange,
+        openModal,
+        closeModal
+    };
+
+})();
+
+// Start App
+document.addEventListener('DOMContentLoaded', app.init);
+</script>
+
+</body>
+</html>
