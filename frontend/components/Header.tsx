@@ -3,7 +3,7 @@
 import { RefreshCw } from "lucide-react";
 
 interface HeaderProps {
-  onScrape: () => void;
+  onScrape: (force: boolean) => void;
   isLoading: boolean;
 }
 
@@ -17,12 +17,12 @@ export default function Header({ onScrape, isLoading }: HeaderProps) {
         <span>GitTrend Analyzer</span>
       </div>
       <button
-        onClick={onScrape}
+        onClick={() => onScrape(true)}
         disabled={isLoading}
         className="bg-[#238636] hover:bg-[#2ea043] disabled:bg-[#30363d] disabled:cursor-not-allowed text-white px-4 py-2 rounded-md font-semibold transition-colors flex items-center gap-2 text-sm"
       >
         <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-        {isLoading ? "Scraping..." : "Scrape Daily"}
+        {isLoading ? "Refreshing..." : "Force Refresh"}
       </button>
     </header>
   );

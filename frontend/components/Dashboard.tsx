@@ -14,10 +14,10 @@ export default function Dashboard() {
   const [since, setSince] = useState("daily");
   const [selectedLang, setSelectedLang] = useState("all");
 
-  const fetchRepos = async (timeRange: string) => {
+  const fetchRepos = async (timeRange: string, force: boolean = false) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:4001/api/trending?since=${timeRange}`);
+      const response = await fetch(`http://localhost:4001/api/trending?since=${timeRange}${force ? '&force=true' : ''}`);
       const data = await response.json();
       setRepos(data);
     } catch (error) {
@@ -28,7 +28,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchRepos(since);
+    fetchRepos(since, false);
   }, [since]);
 
   useEffect(() => {

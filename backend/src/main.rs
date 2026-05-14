@@ -5,13 +5,16 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use chrono::{DateTime, Utc};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::net::SocketAddr;
+use std::path::Path;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Repo {
     owner: String,
     name: String,
@@ -26,6 +29,7 @@ struct Repo {
 #[derive(Deserialize)]
 struct TrendingQuery {
     since: Option<String>,
+    force: Option<bool>,
 }
 
 #[tokio::main]
@@ -34,6 +38,11 @@ async fn main() {
         .with(fmt::layer())
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
+
+    // Ensure data directory exists
+    if let Err(e) = fs::create_dir_all("data") {
+        tracing::error!("Failed to create data directory: {}", e);
+    }
 
     let app = Router::new()
         .route("/api/trending", get(get_trending))
@@ -47,13 +56,83 @@ async fn main() {
 
 async fn get_trending(Query(params): Query<TrendingQuery>) -> impl IntoResponse {
     let since = params.since.unwrap_or_else(|| "daily".to_string());
+    let force = params.force.unwrap_or(false);
+
+    if !force {
+        if let Some(cached_data) = get_cached_data(&since) {
+            return (StatusCode::OK, Json(cached_data)).into_response();
+        }
+    }
+
     match scrape_trending(&since).await {
-        Ok(repos) => (StatusCode::OK, Json(repos)).into_response(),
+        Ok(repos) => {
+            save_data(&since, &repos);
+            (StatusCode::OK, Json(repos)).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Error scraping: {}", e),
         )
             .into_response(),
+    }
+}
+
+fn get_cached_data(since: &str) -> Option<Vec<Repo>> {
+    let data_dir = Path::new("data");
+    if !data_dir.exists() {
+        return None;
+    }
+
+    let mut latest_file: Option<(DateTime<Utc>, std::path::PathBuf)> = None;
+
+    if let Ok(entries) = fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if file_name.starts_with(&format!("trending_{}_", since)) && file_name.ends_with(".json") {
+                    // Filename format: trending_{since}_{timestamp}.json
+                    // Example: trending_daily_2026-05-14T10-00-00Z.json
+                    // Actually, let's just use the file metadata modified time for simplicity and reliability
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        if let Ok(modified) = metadata.modified() {
+                            let modified_utc: DateTime<Utc> = modified.into();
+                            if latest_file.is_none() || modified_utc > latest_file.as_ref().unwrap().0 {
+                                latest_file = Some((modified_utc, path));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some((modified_utc, path)) = latest_file {
+        let now = Utc::now();
+        let duration = now.signed_duration_since(modified_utc);
+        
+        if duration.num_hours() < 24 {
+            if let Ok(content) = fs::read_to_string(path) {
+                if let Ok(repos) = serde_json::from_str::<Vec<Repo>>(&content) {
+                    tracing::info!("Returning cached data for {}", since);
+                    return Some(repos);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn save_data(since: &str, repos: &[Repo]) {
+    let timestamp = Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
+    let filename = format!("data/trending_{}_{}.json", since, timestamp);
+    
+    if let Ok(content) = serde_json::to_string_pretty(repos) {
+        if let Err(e) = fs::write(&filename, content) {
+            tracing::error!("Failed to save data to {}: {}", filename, e);
+        } else {
+            tracing::info!("Saved scraped data to {}", filename);
+        }
     }
 }
 
